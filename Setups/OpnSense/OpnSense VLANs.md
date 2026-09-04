@@ -4,6 +4,9 @@ VLAN20 - SECURITY
 VLAN30 - SERVICES
 VLAN40 - GAME SERVICES
 VLAN50 - USER SPACE
+VLAN60 - (Undetermined - VOIP)
+VLAN70 - (IOT)
+VLAN80 - (Unifi Cameras)
 VLAN90 - LAB NETWORK
 
 Start by going into Interfaces  > Devices > VLAN 
