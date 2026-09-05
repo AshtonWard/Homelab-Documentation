@@ -29,4 +29,9 @@
 		6. I can now access the web gui by going to 10.123.0.1 but i must plug in an ethernet port into the back of the server on eth port 3 because that is what the Vtnet is assigned to via the interface and Proxmox Linux bridge. 
 		7. Also make sure that the network settings in Proxmox are correct. Take a look here: [Adding a new network card] 
 		8. Go to the web server
-			 ![[Pasted image 20260624203712.png]]
+			 ![[Pasted image 20260624203712.png|569]]
+7. Enable Dark Mode: 
+	1. System > Settings > General > Theme 
+		1. opnsense-dark
+	2. Note: 
+		1. This page will be useful when you need to set DNS Servers like Cloudflare or Google.
