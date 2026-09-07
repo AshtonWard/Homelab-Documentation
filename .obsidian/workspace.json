@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Setups/Proxmox/Installing Some Tools.md",
+                "file": "Setups/Ansible/Ansible Crash Course.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Installing Some Tools"
+              "title": "Ansible Crash Course"
             }
           }
         ]
@@ -186,10 +186,11 @@
   },
   "active": "bf14ba2c8dd5229a",
   "lastOpenFiles": [
+    "Setups/Proxmox/Installing Some Tools.md",
+    "Setups/Ansible/Ansible Crash Course.md",
     "Setups/OpnSense/Setup OpnSense.md",
     "Setups/Proxmox/ProxMenuX.md",
     "Setups/OpnSense/OpnSense VLANs.md",
-    "Setups/Proxmox/Installing Some Tools.md",
     "Pasted image 20260904221135.png",
     "Setups/Ansible/Setting up for SSH.md"
   ]
