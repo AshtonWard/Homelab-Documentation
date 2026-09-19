@@ -1,33 +1,118 @@
-Start with SSH into the Ansible machine. Then use the same command to SSH into the other machines that will be managed by Ansible.  
-```bash
-ssh <user>@<ip address>
-```
-put in the password. 
-exit, then run 
-```bash
-ssh-copy-id <user>@<ip address>
-```
-and put in the password. Once able to log in without needing to use the password then that machine can be added to the inventory.
+# Setting Up SSH for Ansible
 
-I have all my machines held in github. 
-Run a ping to verify that ansible works as intended. 
-```
-ansible proxmox -i inventory.ini -m ping
-```
-`proxmox` is the group I am running the test against. 
-`-i` is the flag for in the inventory file. 
-`-m` is the flag for module, ping is the module. 
+Ansible's Linux management model is refreshingly simple: the controller connects to the target over SSH and does the work.
 
-Passing result: 
+That also means SSH needs to work **before** I blame Ansible.
+
+## First Connection
+
+From the Ansible controller:
+
 ```bash
-pve01 | SUCCESS => {
-    "ansible_facts": {
-        "discovered_interpreter_python": "/usr/bin/python3"
-    },
+ssh <USER>@<HOSTNAME>
+```
+
+The first connection lets me verify:
+
+- DNS or address resolution
+- routing
+- firewall policy
+- SSH service availability
+- credentials
+
+If ordinary SSH does not work, `ansible -m ping` is not going to rescue the situation.
+
+## Configure Key-Based Authentication
+
+If the target is intended to use the controller's SSH key:
+
+```bash
+ssh-copy-id <USER>@<HOSTNAME>
+```
+
+Then test again:
+
+```bash
+ssh <USER>@<HOSTNAME>
+```
+
+The goal is a successful login using the intended key rather than repeatedly typing the target account password.
+
+## Add the Host to Inventory
+
+My original setup used `inventory.ini`. The lab later moved to YAML inventory with `host_vars` and `group_vars`.
+
+A simplified example:
+
+```yaml
+all:
+  hosts:
+    example01:
+  children:
+    linux:
+      hosts:
+        example01:
+```
+
+Connection-specific values can live in the appropriate variable files instead of being scattered through documentation.
+
+## Test with Ansible
+
+For one host:
+
+```bash
+ansible <HOSTNAME> -m ping
+```
+
+For a group:
+
+```bash
+ansible <GROUP> -m ping
+```
+
+A successful result looks roughly like:
+
+```text
+example01 | SUCCESS => {
     "changed": false,
     "ping": "pong"
 }
 ```
 
-From here we can continue to add machines and fill out the inventory.ini.
+Ansible's `ping` module is not an ICMP ping. It verifies that Ansible can connect and execute its Python-based module on the target.
 
+## If It Fails
+
+I check in this order:
+
+1. Can the controller resolve the hostname?
+2. Can it route to the target?
+3. Is the required SSH traffic allowed?
+4. Is SSH running on the target?
+5. Does normal `ssh` work?
+6. Is the correct user/key being used?
+7. Is the host in the expected Ansible inventory/group?
+
+Useful commands:
+
+```bash
+dig <HOSTNAME>
+ssh -v <USER>@<HOSTNAME>
+ansible-inventory --graph
+ansible-inventory --host <HOSTNAME>
+ansible <HOSTNAME> -m ping -vvv
+```
+
+## Security Note
+
+I do not store private SSH keys, passwords, or other authentication material in this documentation repository.
+
+The walkthrough should explain the trust model without becoming a collection of everything needed to authenticate to the lab.
+
+## What I Learned
+
+Getting SSH working manually first makes Ansible troubleshooting dramatically easier.
+
+"Ansible is broken" has, on more than one occasion, translated to "DNS is broken," "SSH is blocked," or "I put the host in the wrong group."
+
+Layers matter.
