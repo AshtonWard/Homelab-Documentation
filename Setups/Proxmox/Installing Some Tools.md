@@ -1,727 +1,327 @@
-1. Always update first. 
-	1. `apt update`
-2. Now lets installs some tools: 
-	1. 
-	   ```
-		apt install lm-sensors
-		apt install smartmontools
-		apt install iperf3 -y 
-			```
-				This will ask you to run as a deamon, I did.
-			```
-		apt install ethtool
-		apt install htop
-		apt install tcpdump
-		apt install iotop
-		apt install nut -y
-			```
-				I have UPS so this will be useful. 
-			```
-	   ```
-3. Admittedly i had AI write this: 
-## Overview
+# My Proxmox Diagnostic Toolkit
 
-These tools provide the Proxmox hosts with a basic command-line diagnostic and monitoring toolkit. The goal is not to install every available Linux utility, but to have a small collection of tools that can answer the most common questions when something isn't working correctly.
+The Proxmox web interface is excellent for managing VMs, containers, storage, and host resources. But when something gets weird, I want tools that let me look underneath the GUI.
 
-When troubleshooting a Proxmox host, I want to be able to determine whether the problem is related to:
+This is the small toolkit I install or keep available for answering questions such as:
 
-- Hardware
-    
-- CPU or memory utilization
-    
-- Storage
-    
-- Network interfaces
-    
-- Network throughput
-    
-- Packet flow
-    
-- Disk I/O
-    
-- Power/UPS conditions
-    
+- Is the host overheating?
+- Is a disk unhealthy?
+- Is the NIC negotiating at the expected speed?
+- Is the network actually delivering the throughput I expect?
+- Are packets reaching the interface?
+- Is a process hammering the disk?
+- What is consuming CPU or RAM?
+- What happens when utility power disappears?
 
-The Proxmox web interface provides excellent visibility into VMs, containers, storage, and overall host utilization, but these utilities provide a deeper look at what is happening underneath the Proxmox layer.
+## Install
+
+On a Debian-based Proxmox host:
+
+```bash
+apt update
+apt install -y lm-sensors smartmontools iperf3 ethtool htop tcpdump iotop nut
+```
+
+I do not necessarily configure every tool immediately. Installing NUT, for example, does not magically configure a safe UPS shutdown strategy.
 
 ---
 
-# Hardware Monitoring
+## Hardware Monitoring — `lm-sensors`
 
-## lm-sensors
-
-`lm-sensors` provides access to hardware sensor information exposed by the Linux kernel. It is primarily useful for monitoring temperatures and other hardware conditions.
-
-### Installation
-
-```bash
-apt install lm-sensors
-```
-
-### Basic usage
+`lm-sensors` exposes hardware sensor data made available by the kernel.
 
 ```bash
 sensors
 ```
 
-This displays the sensors detected by the system, including temperatures and other available readings.
+Useful for:
 
-### Use cases
+- CPU temperatures
+- thermal troubleshooting
+- checking cooling behavior under load
+- establishing a normal baseline
 
-`lm-sensors` is useful when:
-
-- Checking CPU temperatures
-    
-- Troubleshooting overheating
-    
-- Verifying that cooling is functioning correctly
-    
-- Monitoring a heavily loaded server
-    
-- Checking temperatures after installing additional hardware
-    
-- Establishing a baseline for normal operating temperatures
-    
-
-For a server such as the Dell R730, this is particularly useful when running workloads that generate significant CPU or GPU activity.
-
-### Example
-
-```bash
-sensors
-```
-
-If a server begins behaving strangely under heavy load, checking temperatures can help determine whether thermal conditions are contributing to the problem.
 ![[Pasted image 20260904221135.png|383]]
 
----
-
-# Storage Health
-
-## smartmontools
-
-`smartmontools` provides access to SMART (Self-Monitoring, Analysis and Reporting Technology) information from supported storage devices.
-
-This is one of the more important utilities for a homelab because storage failures can potentially result in lost VMs, containers, or data.
-
-### Installation
-
-```bash
-apt install smartmontools
-```
-
-### Basic usage
-
-For a SATA/SAS device:
-
-```bash
-smartctl -a /dev/sda
-```
-
-The exact device name may differ depending on the storage configuration.
-
-### Information available
-
-SMART information can include:
-
-- Drive health
-    
-- Temperature
-    
-- Power-on hours
-    
-- Read/write error information
-    
-- Reallocated sectors
-    
-- Pending sectors
-    
-- Device information
-    
-- Self-test results
-    
-- Recorded failures
-    
-
-### Use cases
-
-`smartctl` is useful when:
-
-- Investigating a failing or suspicious drive
-    
-- Checking the health of used enterprise drives
-    
-- Establishing a baseline when adding a drive
-    
-- Investigating storage errors
-    
-- Checking drive temperatures
-    
-- Performing drive self-tests
-    
-
-### Example
-
-```bash
-smartctl -h
-```
-
-A useful habit is to establish a baseline when a drive is first installed. If the drive later develops errors or abnormal SMART values, there is something to compare against.
-
-> **Note:** The device path may not always be `/dev/sda`, especially when using RAID controllers, HBAs, ZFS, or other storage configurations. Verify the actual device before running SMART commands.
+Not every enterprise server exposes every sensor through `lm-sensors`, so vendor management interfaces can still be important.
 
 ---
 
-# Network Testing
+## Storage Health — `smartmontools`
 
-## iperf3
-
-`iperf3` is used to measure network performance between two systems.
-
-This is especially useful in a homelab because simply having a 1 GbE, 10 GbE, or faster link does not guarantee that the network is actually achieving the expected throughput.
-
-### Installation
+SMART data can provide early evidence of drive problems.
 
 ```bash
-apt install iperf3
+smartctl -a /dev/<DEVICE>
 ```
 
-### Server
+I look for things such as:
 
-On one machine:
+- overall health
+- temperature
+- power-on hours
+- reallocated sectors
+- pending sectors
+- recorded errors
+- self-test history
+
+The exact device path and SMART access method depend on whether the storage is behind a RAID controller, HBA, ZFS stack, or direct SATA/SAS connection.
+
+A useful habit is checking a used drive when I install it. "It was already like that" is much easier to determine when I actually have a baseline.
+
+---
+
+## Network Throughput — `iperf3`
+
+`iperf3` answers a very useful question:
+
+> The link says it is fast. Is it actually fast?
+
+On one system:
 
 ```bash
 iperf3 -s
 ```
 
-This starts an iperf3 server and waits for a client connection.
-
-### Client
-
-From another machine:
+From another:
 
 ```bash
-iperf3 -c <server-ip>
+iperf3 -c <SERVER>
 ```
 
-Example:
+Useful for:
 
-```bash
-iperf3 -c 10.123.10.10
-```
+- validating network upgrades
+- testing physical vs. virtual networking
+- comparing network paths
+- checking VLAN performance
+- investigating unexpectedly slow transfers
 
-### Use cases
-
-`iperf3` can be used to:
-
-- Verify network throughput
-    
-- Test new network hardware
-    
-- Verify 1 GbE/2.5 GbE/10 GbE performance
-    
-- Troubleshoot unexpectedly slow connections
-    
-- Test VLAN connectivity
-    
-- Compare physical and virtual networking
-    
-- Test different network paths
-    
-- Establish a performance baseline
-    
-
-### Homelab example
-
-A useful test could be:
-
-```text
-Proxmox R730
-     |
-     | 10 GbE
-     |
-   Switch
-     |
-     | 10 GbE
-     |
-Another Server
-```
-
-Run `iperf3 -s` on one server and `iperf3 -c <IP>` from the other.
-
-If the link is supposed to provide 10 GbE but the test produces significantly lower throughput, further investigation can begin with `ethtool`, switch configuration, cabling, VLAN configuration, CPU utilization, and other factors.
+If a link negotiates at the expected speed but `iperf3` performs badly, I can move on to CPU load, switching, cabling, MTU, offloads, virtualization, and other layers with actual evidence.
 
 ---
 
-# Network Interface Diagnostics
+## NIC Diagnostics — `ethtool`
 
-## ethtool
-
-`ethtool` provides detailed information about Ethernet interfaces.
-
-This is one of the most useful tools for troubleshooting physical network connectivity.
-
-### Installation
+Basic link information:
 
 ```bash
-apt install ethtool
+ethtool <INTERFACE>
 ```
 
-### Basic usage
+Driver and firmware:
 
 ```bash
-ethtool eno1
+ethtool -i <INTERFACE>
 ```
 
-This can show information such as:
-
-- Link detected
-    
-- Link speed
-    
-- Duplex
-    
-- Auto-negotiation
-    
-- Supported link modes
-    
-- Advertised link modes
-    
-
-### Driver information
+Offload features:
 
 ```bash
-ethtool -i eno1
+ethtool -k <INTERFACE>
 ```
 
-This can show:
+I commonly check:
 
-- NIC driver
-    
-- Driver version
-    
-- Firmware version
-    
-- PCI bus information
-    
+- link detected
+- speed
+- duplex
+- auto-negotiation
+- driver
+- firmware
 
-### Offload information
-
-```bash
-ethtool -k eno1
-```
-
-This displays various network offloading features.
-
-### Use cases
-
-`ethtool` is useful when:
-
-- A NIC is not connecting
-    
-- A 10 GbE NIC is only negotiating at 1 GbE
-    
-- Investigating duplex problems
-    
-- Checking NIC drivers
-    
-- Checking firmware information
-    
-- Troubleshooting physical link issues
-    
-- Investigating unexpected network performance
-    
-
-### Example troubleshooting workflow
-
-If a Proxmox host is supposed to have a 10 GbE connection but performance is poor:
-
-```bash
-ethtool eno1
-```
-
-Check:
-
-```text
-Speed:
-Duplex:
-Link detected:
-```
-
-Then:
-
-```bash
-ethtool -i eno1
-```
-
-Check the driver and firmware.
-
-Finally, use `iperf3` to determine whether the connection actually achieves the expected throughput.
-
-This creates a useful troubleshooting chain:
+A useful sequence is:
 
 ```text
 ethtool
    ↓
-Is the NIC/link configured correctly?
+Is the link what I think it is?
    ↓
 iperf3
    ↓
-Is the network actually performing correctly?
+Does it perform like I think it should?
 ```
 
 ---
 
-# System Resource Monitoring
-
-## htop
-
-`htop` provides an interactive view of system resources and running processes.
-
-### Installation
-
-```bash
-apt install htop
-```
-
-### Usage
+## CPU, Memory, and Processes — `htop`
 
 ```bash
 htop
 ```
 
-It provides a real-time view of:
+Useful when:
 
-- CPU utilization
-    
-- Memory utilization
-    
-- Processes
-    
-- Process CPU usage
-    
-- Process memory usage
-    
-- System load
-    
-- Process IDs
-    
+- a host feels slow
+- CPU utilization spikes
+- memory usage looks suspicious
+- I need to identify a resource-heavy process
 
-### Use cases
-
-`htop` is useful when:
-
-- A VM appears unusually slow
-    
-- The host has high CPU utilization
-    
-- Memory usage is unexpectedly high
-    
-- A process is consuming excessive resources
-    
-- Investigating system load
-    
-
-For example, if the Proxmox GUI reports unusually high CPU utilization, `htop` can help determine which processes are actually responsible.
+The GUI can tell me the host is busy. `htop` helps tell me **who is responsible**.
 
 ---
 
-# Packet Capture & Network Troubleshooting
+## Packet Capture — `tcpdump`
 
-## tcpdump
-
-`tcpdump` captures and displays network packets directly from a network interface.
-
-This is one of the most powerful troubleshooting tools in this collection because it allows network traffic to be observed rather than inferred.
-
-### Installation
+When I get tired of guessing whether a packet exists, I capture it.
 
 ```bash
-apt install tcpdump
+tcpdump -i <INTERFACE> -n
 ```
 
-### Basic usage
+Examples:
+
+DNS:
 
 ```bash
-tcpdump -i eno1
-```
-
-This captures packets seen on `eno1`.
-
-### More readable output
-
-```bash
-tcpdump -i eno1 -n
-```
-
-The `-n` option prevents DNS lookups, which makes packet capture faster and avoids introducing additional DNS traffic into the troubleshooting process.
-
-### Capture specific traffic
-
-For example, DNS:
-
-```bash
-tcpdump -i eno1 port 53
+tcpdump -i <INTERFACE> -n port 53
 ```
 
 DHCP:
 
 ```bash
-tcpdump -i eno1 port 67 or port 68
+tcpdump -i <INTERFACE> -n 'port 67 or port 68'
 ```
 
-ICMP/ping:
+ICMP:
 
 ```bash
-tcpdump -i eno1 icmp
+tcpdump -i <INTERFACE> -n icmp
 ```
 
-### Use cases
+This is especially useful for VLAN, DNS, DHCP, routing, and firewall troubleshooting.
 
-`tcpdump` is useful for troubleshooting:
+Instead of:
 
-- VLANs
-    
-- DNS
-    
-- DHCP
-    
-- Routing
-    
-- Firewall rules
-    
-- VM connectivity
-    
-- Network services
-    
-- Unexpected traffic
-    
-- Failed connections
-    
+> "I think OPNsense is blocking it."
 
-### Example
-
-If a VM claims it cannot resolve DNS, rather than immediately changing DNS configuration, packet capture can help answer:
+I can ask:
 
 ```text
-Did the DNS request leave the VM?
-        ↓
-Did it reach the Proxmox host?
-        ↓
-Did it reach the DNS server?
-        ↓
-Did the DNS server respond?
-        ↓
+Did the request leave?
+      ↓
+Did it cross the expected interface?
+      ↓
+Did the destination receive it?
+      ↓
+Was there a response?
+      ↓
 Did the response return?
 ```
 
-This changes troubleshooting from guessing to observing what is actually happening on the network.
+Packet capture has ruined a lot of perfectly good theories by showing me what was actually happening.
 
 ---
 
-# Disk I/O Monitoring
-
-## iotop
-
-`iotop` displays processes that are actively performing disk I/O.
-
-### Installation
-
-```bash
-apt install iotop
-```
-
-### Usage
+## Disk I/O — `iotop`
 
 ```bash
 iotop
 ```
 
-### Use cases
+Useful for identifying:
 
-`iotop` can help identify:
+- heavy disk writers
+- backup activity
+- logging spikes
+- VM-related I/O
+- storage contention
 
-- Processes generating heavy disk activity
-    
-- Unexpected storage utilization
-    
-- Backup-related I/O
-    
-- VM-related disk activity
-    
-- Processes causing storage contention
-    
-
-For example, if a Proxmox host suddenly experiences high disk utilization, `iotop` can help determine whether the cause is a VM, backup process, database, logging process, or another service.
+A "network problem" can occasionally turn out to be a system waiting on storage. Looking at multiple layers prevents tunnel vision.
 
 ---
 
-# UPS Management
+## UPS Monitoring — NUT
 
-## Network UPS Tools (NUT)
+Network UPS Tools can monitor supported UPS hardware and coordinate controlled shutdown behavior.
 
-`nut` — Network UPS Tools — provides software for monitoring and managing UPS systems.
-
-This is particularly relevant to this homelab because the Proxmox infrastructure is protected by a Vertiv PST5 UPS.
-
-### Installation
+Install:
 
 ```bash
 apt install nut
 ```
 
-NUT can communicate with supported UPS devices and provide information such as:
-
-- UPS status
-    
-- Battery state
-    
-- Input voltage
-    
-- Output voltage
-    
-- Battery charge
-    
-- Runtime estimates
-    
-- Power conditions
-    
-
-More importantly, NUT can allow the Proxmox host to respond to a prolonged power outage by performing a controlled shutdown.
-
-### Intended use
-
-The desired behavior is:
+The intended outcome is:
 
 ```text
-Utility Power
-     |
-     v
-Vertiv UPS
-     |
-     v
-Proxmox Host
-     |
-     v
-VMs / Containers
+Utility Power Fails
+        ↓
+UPS Runs on Battery
+        ↓
+NUT Detects State
+        ↓
+Configured Threshold Reached
+        ↓
+Controlled Shutdown
+        ↓
+No Surprise Power Loss
 ```
 
-During a power outage:
+> [!CAUTION]
+> Installing NUT alone does not create this behavior. The UPS driver, communication method, monitoring mode, shutdown logic, and testing all need to be configured for the actual hardware.
 
-```text
-Power Failure
-     |
-     v
-UPS switches to battery
-     |
-     v
-NUT detects UPS state
-     |
-     v
-Power remains unavailable
-     |
-     v
-Controlled Proxmox shutdown
-     |
-     v
-VMs/containers shut down cleanly
-```
-
-This prevents the server from simply losing power when the UPS battery becomes depleted.
-
-> **Configuration still needs to be completed for the specific Vertiv PST5 and its communication interface.** Installing NUT alone does not automatically provide a complete UPS shutdown solution.
+That configuration is still something I want to document separately once it is fully implemented and tested.
 
 ---
 
-# Troubleshooting Workflow
+## How I Troubleshoot
 
-These tools become most useful when combined rather than treated as individual utilities.
-
-A general troubleshooting workflow can be:
+The tools are more valuable together than individually.
 
 ```text
-Something isn't working
-          |
-          v
-    Check host health
-       htop
-       sensors
-          |
-          v
-    Check storage
-     smartctl
-     iotop
-          |
-          v
-    Check network link
-       ethtool
-          |
-          v
-    Test throughput
-       iperf3
-          |
-          v
-   Inspect packets
+Something is wrong
+       ↓
+Host health
+  htop / sensors
+       ↓
+Storage
+ smartctl / iotop
+       ↓
+Physical network
+     ethtool
+       ↓
+Throughput
+      iperf3
+       ↓
+Packet flow
       tcpdump
-          |
-          v
- Identify the actual failure
+       ↓
+Actual evidence
 ```
 
-For example, if a VM suddenly has poor network performance:
+I do not follow that exact order for every incident. The point is to identify the layer instead of immediately changing whatever component I happen to be looking at.
 
-1. Check the VM's network configuration.
-    
-2. Check the Proxmox host's NIC with `ethtool`.
-    
-3. Check the physical link speed and duplex.
-    
-4. Test throughput with `iperf3`.
-    
-5. Capture traffic with `tcpdump` if the problem is related to connectivity rather than throughput.
-    
-6. Check CPU and system load with `htop`.
-    
-7. Investigate storage with `iotop` if the VM's apparent network problem may actually be caused by storage contention.
-    
+## Quick Reference
 
-The purpose of this toolkit is to make troubleshooting **evidence-based**. Instead of assuming that a problem is DNS, VLANs, storage, or hardware, these tools provide a way to progressively narrow down the actual cause.
-
----
-
-# Quick Reference
-
-|Tool|Primary Purpose|First Command|
+| Tool | Primary use | First command |
 |---|---|---|
-|`lm-sensors`|Hardware temperatures/sensors|`sensors`|
-|`smartmontools`|Drive health/SMART|`smartctl -a /dev/sda`|
-|`iperf3`|Network throughput|`iperf3 -c <IP>`|
-|`ethtool`|NIC/link diagnostics|`ethtool eno1`|
-|`htop`|CPU/RAM/process monitoring|`htop`|
-|`tcpdump`|Packet capture|`tcpdump -i eno1 -n`|
-|`iotop`|Disk I/O monitoring|`iotop`|
-|`nut`|UPS monitoring/shutdown|`upsc <ups-name>`|
+| `lm-sensors` | temperatures/sensors | `sensors` |
+| `smartmontools` | drive health | `smartctl -a /dev/<DEVICE>` |
+| `iperf3` | network throughput | `iperf3 -c <SERVER>` |
+| `ethtool` | NIC/link diagnostics | `ethtool <INTERFACE>` |
+| `htop` | CPU/RAM/processes | `htop` |
+| `tcpdump` | packet capture | `tcpdump -i <INTERFACE> -n` |
+| `iotop` | disk I/O | `iotop` |
+| NUT | UPS monitoring | `upsc <UPS_NAME>` |
 
----
+## What I Learned
 
-# Philosophy
+The GUI is a management layer, not reality itself.
 
-These utilities are intentionally kept separate from Proxmox itself. Proxmox provides the virtualization management layer, while these Linux utilities provide visibility into the underlying system.
-
-The goal is to understand what is happening underneath the GUI:
+Underneath Proxmox are Linux, drivers, interfaces, disks, processes, and physical hardware. Learning how to inspect those layers has been more useful than memorizing where every button lives in the web interface.
 
 ```text
 Applications
-     ↓
+    ↓
 VMs / Containers
-     ↓
+    ↓
 Proxmox
-     ↓
+    ↓
 Linux
-     ↓
-CPU / RAM / Storage / NIC
-     ↓
+    ↓
+CPU / RAM / Storage / Network
+    ↓
 Physical Hardware
 ```
 
-Learning to troubleshoot at each layer is more valuable than simply learning where a setting exists in the Proxmox interface. These tools provide the foundation for diagnosing the physical host and network infrastructure that the virtualization environment depends on.
+When something breaks, I want evidence before configuration changes.
