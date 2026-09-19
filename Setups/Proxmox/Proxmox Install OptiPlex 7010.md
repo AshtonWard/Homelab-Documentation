@@ -1,50 +1,126 @@
-I bought a OptiPlex 7010 from salvation army and i will boot it of the internet to see what was possibly on it before I image it with Proxmox and add it to my cluster to be my NAS.
+# Turning a Dell OptiPlex 7010 into a Proxmox Node
 
-1. Plug all connections needed into the machine. 
-	1. I went ahead and started the installation to see if the current hard drice was detected. i saw it was a 250GB drive and decided to swap it out for a 2TB drive that i was using for pve01. pve01 is using a 3TB now. 
-2. As the machine is booting press F2.
-3. Once you are in the bios look for boot menu. 
-4. Select UEFI and make sure USB: XXXXXX is selected. first, click apply and exit
-5. Load into the Proxmox installer. 
-	1. Install Proxmox VE (graphical)
-	2. Accept EULA
-	3. Verify Drive.
-	4. Input Country, Time Zone, and keyboard layout. 
-	5. Input password and email
-	6. Select Network Interface Card (NIC)
-		1. I had an PCIE Card with 1000e available to select.
-		2. FQDN (pve02.lab.subnetphantom.com)
-		3. Ip Address: 192.168.1.4 
-		4. Gateway: 192.168.1.1
-		5. DNS Server: 192.168.1.1
-	7. Continue and wait for the reboot. One the machine reboots, you may move to the Ip address that you assigned it. As long as it is right
-		1. Issue: I could not reach the webserver. 
-			1. I consoled into the machine and router. I noticed in my router that it was seen when i changed the ports so the cable that i was using is good. I ran ran 
-				```bash
-				ip link
-				```
-				and it displayed that my NICs were all DOWN.
-			2. Run this to bring up a NIC:
-				```bash 
-					ip link set {INTERFACE} up
-					cat /etc/network/interfaces
-				```
-			3. Verify that when you run "ip link" which ever says "UP" should also be the one that is set in "car /etc/network/interfaces" > "bridge-ports: XXXX"
-			4. To change it: 
-				```bash
-					nano /etc/network/interfaces
-				```
-				Change the port, then save and exit. CTL+S, CTL+X
-			5. restert the networking service. 
-				```shell
-					systemctl restart networking
-				```
-			6. Verify you can see the ping and webserver. 
-	8. Login
-	9. If you are met with "No Valid Subscription" search for the PVE Helpter script for PVE Post Install script. 
-		```bash
-			bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/tools/pve/post-pve-install.sh)"
-		```
-	10. If you want to put this device in a cluster do not disable HA. otherwise disable all else. 
-	11. Wait for update and reboot. 
-	12. 
+> [!NOTE]
+> Historical build log. The addressing and some implementation details from this build predate the current segmented network.
+
+I picked up a Dell OptiPlex 7010 from a thrift store and decided it deserved a second life in the homelab.
+
+The plan was to install Proxmox, add it as another node, and use the hardware for storage/NAS-related workloads.
+
+## Hardware Preparation
+
+The machine originally had a smaller drive installed. During the build I decided to swap in a larger disk that I already had available.
+
+Before installing anything, I verified that the BIOS detected the intended drive.
+
+## Boot the Installer
+
+On this OptiPlex:
+
+1. Power on the system.
+2. Press **F2** for BIOS/setup.
+3. Verify UEFI boot configuration.
+4. Select the installer USB.
+5. Boot the Proxmox VE graphical installer.
+
+During installation:
+
+- accept the EULA
+- verify the target disk
+- set location/time/keyboard
+- configure administrative credentials
+- select the intended NIC
+- configure the hostname and initial management networking
+
+The exact address from the original build is intentionally omitted because the lab has since been redesigned.
+
+## The NIC Problem
+
+After installation, I could not reach the Proxmox web interface.
+
+This became the useful part of the build.
+
+I knew the physical cable was probably good because I could see behavior change upstream when I moved connections. From the console, I checked the interfaces:
+
+```bash
+ip link
+```
+
+The interfaces were not in the state I expected.
+
+I then inspected Proxmox's network configuration:
+
+```bash
+cat /etc/network/interfaces
+```
+
+The key was matching the physical NIC I was actually using with the interface configured as the bridge port.
+
+Conceptually:
+
+```text
+Physical Cable
+      ↓
+Correct NIC
+      ↓
+Proxmox Bridge Port
+      ↓
+Linux Bridge
+      ↓
+Management Connectivity
+```
+
+If necessary, an interface can be brought up for testing:
+
+```bash
+ip link set <INTERFACE> up
+```
+
+I edited the network configuration:
+
+```bash
+nano /etc/network/interfaces
+```
+
+and corrected the bridge-port assignment.
+
+After verifying the configuration, I reloaded/restarted networking from the local console and confirmed connectivity.
+
+> [!CAUTION]
+> Restarting networking on a remote Proxmox host can disconnect the session. I prefer local console access when changing the management bridge.
+
+## Post-Install
+
+Once connectivity was restored, I could reach the native Proxmox web interface and continue configuration.
+
+I also evaluated community post-install tooling. Third-party helper scripts are convenient, but I treat them as external code: review the project and understand the changes before running them.
+
+## Why This Build Was Useful
+
+The installation itself was ordinary. The networking failure was the valuable part.
+
+The problem forced me to understand that a Proxmox bridge is not just a GUI setting. The physical NIC, Linux bridge, host address, switch port, and eventually VLAN configuration all have to agree.
+
+That lesson became much more important later when the lab moved to VLAN-aware networking.
+
+## What I Learned
+
+When the web interface is unreachable after a Proxmox install, I now check:
+
+1. physical link
+2. `ip link`
+3. bridge configuration
+4. management address
+5. route/gateway
+6. switch configuration
+7. firewall/routing upstream
+
+"Proxmox is down" is not a diagnosis.
+
+Sometimes Proxmox is perfectly healthy and I simply told it to use the wrong NIC.
+
+## Related
+
+- [[Adding a new network card]]
+- [[Setting Up VLANs in Proxmox]]
+- [[../../Services/Proxmox]]
