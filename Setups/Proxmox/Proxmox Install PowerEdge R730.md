@@ -1,54 +1,129 @@
-Lets start over with the home lab. I have been planning this a little bit and my power went out for a few hours so I'm going to take this a sign to finally start over and even start over with my raid configuration. 
+# Rebuilding My Dell PowerEdge R730 with Proxmox
 
-First thing will be getting into the bios of my PowerEdge server and reconfiguring the raid. 
+> [!NOTE]
+> Historical build log. This captures the rebuild that became the foundation of the current lab. Exact network values from that stage are intentionally not treated as current documentation.
 
-Steps: 
-	1. power off the power edge. 
-		Note: I did do a hard power off only because my Router was a VM and i couldn't access the webpage. I am also starting form ground 0. 
-		1. plug in mouse, keyboard and display if not already connected. 
-	2. While booting up, press F2 to boot into bios. Also watch the display to verify that is the correct key to press. Enter the System Setup. 
-		1. Once in, go to Device Settings
-		2. Select Raid Controller
-		3. Configuration Management
-		4. Configure for Non-Raid Disks
-			1. Agree to all to delete for all disks
-		5. Safe and reboot into F10 LifeCycle Controller
-		6. Hardware Configuration
-		7. Config Wizard
-		8. Raid Configuration
-		9. Select the RIAD controller
-		10. Select the drives
-		11. Select the desired raid or default
-		12. Select SAS or SATA
-		13. Name the Disk
-		14. Next 
-		15. Finish
-	3. Download the ISO for the OS that will be used. 
-	4. Bela etcher 
-	5. Plug in the flash drive to the machine you will reimage. 
-	6. Reboot the server 
-		1. May have to change the boot order to boot the flash drive first. 
-	7. Once the display is "Welcome to Proxmox" 
-		1. install Proxmox VE (graphical)
-		2. Accept the EULA
-		3. Verify the target 
-		4. Verify the Location
-		5. Put in a strong password
-		6. Verify the correct input signal, FQDN, IP address, and gateway
-			1. FQDN (Fully Qualified Domain Name) pve01.lab.subnetphantom.com
-			2. 192.168.1.3 ( I set this IP address because it will be the 3rd most important IP address in my home lab/network.)=\
-		7. Go to a web browser and go to the IP address and default port unless you set it differently. In my case it was 192.168.1.3:8006
-		8. Login to Proxmox
-		9. If it tells you "No Valid Subscription"
-			1. Proxmox helper scripts
-			2. Locate PBS Post Install
-			3. Copy script
-			4. paste the script in the shell. pve01(the hostname that was set when the FQDN was set.) > shell 
-			5. ```
-			   bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/tools/pve/post-pve-install.sh)"
-			   ```
-			6. Execute within the Proxmox shell 
-			   It is recommended to answer “yes” (y) to all options presented during the process.
-			7. I will be putting this machine in a cluster so will keep HA enabled. 
-			8. Wait and then reboot the machine. 
-		Proxmox is now installed on my PowerEdge R730. lets get the NAS working
+At one point the homelab needed a reset.
+
+Conveniently—or depending on how you look at it, inconveniently—the power went out for several hours. I took that as a sign to stop patching the old layout and rebuild the PowerEdge R730 properly, including the storage configuration.
+
+The R730 became the primary Proxmox host.
+
+## Starting with Storage
+
+I powered the server down and entered the Dell system setup during boot.
+
+My general path through the lifecycle/controller tooling was:
+
+1. Enter **System Setup**.
+2. Open **Device Settings**.
+3. Select the RAID controller.
+4. Review the existing disk configuration.
+5. Reconfigure the disks for the intended layout.
+6. Create the desired virtual disk/RAID configuration.
+7. Verify the selected physical drives before applying changes.
+
+> [!CAUTION]
+> RAID configuration can destroy data. "Agree to all" was part of my original scratch notes because I was intentionally rebuilding from zero. That is absolutely not universal advice.
+
+If I were following this today, I would first record:
+
+- controller model
+- physical disk identifiers
+- disk health
+- existing virtual disks
+- data that needs preservation
+- intended RAID level and why
+
+## Install Proxmox
+
+I wrote the Proxmox ISO to a USB drive and booted the R730 from it.
+
+The installation itself followed the normal process:
+
+1. Install Proxmox VE using the graphical installer.
+2. Accept the EULA.
+3. Verify the installation target.
+4. Configure location and keyboard.
+5. Set a strong administrative password.
+6. Select the correct management NIC.
+7. Configure the hostname and management network.
+8. Complete installation and reboot.
+
+The original build used an older management subnet. The current network design is documented elsewhere, so I do not repeat the old address as though it were still authoritative.
+
+## Verify the Management Plane
+
+After reboot:
+
+- verify the host is reachable
+- verify DNS
+- verify the default route
+- open the native Proxmox web interface
+- verify storage and network interfaces
+
+Useful local commands:
+
+```bash
+ip addr
+ip route
+hostname -f
+pvesm status
+```
+
+## Post-Install Changes
+
+I evaluated community Proxmox helper scripts during the build.
+
+They can simplify repository and post-install configuration, but they are third-party code and can change over time. I no longer treat "paste this remote shell command and answer yes to everything" as durable documentation.
+
+If I use one, I want to know:
+
+- which project it came from
+- what it changes
+- whether it is still maintained
+- whether those changes match my intended configuration
+
+That is less exciting than blindly piping the Internet into Bash, but generally produces fewer surprises.
+
+## Clustering
+
+The R730 became part of the multi-node Proxmox environment.
+
+I kept cluster-related configuration separate because clustering introduces Corosync, quorum, and failure modes that deserve their own documentation.
+
+See [[Creating a Proxmox cluster]].
+
+## Why This Rebuild Mattered
+
+This rebuild was more than reinstalling a hypervisor.
+
+It became the point where the lab started moving toward:
+
+- intentional VLAN segmentation
+- repeatable VM templates
+- Ansible configuration management
+- GitHub Actions
+- centralized security monitoring
+- container orchestration
+- documented architecture
+
+The R730 stopped being "the server I run stuff on" and became part of an actual infrastructure design.
+
+## What I Learned
+
+A clean rebuild can be faster than preserving years of accidental architecture.
+
+The important part is making sure the new environment does not simply recreate the same undocumented decisions with newer software.
+
+Also: if the router is a VM on the server I am shutting down, I should have a plan for how I am going to administer the server after I shut down the router.
+
+That lesson arrived exactly as gracefully as you would expect.
+
+## Related
+
+- [[Creating a Proxmox cluster]]
+- [[Adding a new network card]]
+- [[Setting Up VLANs in Proxmox]]
+- [[../../Architecture/Homelab Architecture]]
+- [[../../Services/Proxmox]]
